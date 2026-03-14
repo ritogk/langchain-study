@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "pattern1_conditional": "./graphs/pattern1_conditional.py:graph",
+    "pattern2_parallel": "./graphs/pattern2_parallel.py:graph",
+    "pattern3_llm_router": "./graphs/pattern3_llm_router.py:graph",
+    "pattern4_loop": "./graphs/pattern4_loop.py:graph"
+  },
+  "env": "../.env"
+}

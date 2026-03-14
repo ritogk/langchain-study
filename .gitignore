@@ -1,0 +1,28 @@
+# 環境変数
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node.js
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LangGraph
+.langgraph_api
+.langgraph-checkpoint/
+
+# ビルド成果物
+dist/
