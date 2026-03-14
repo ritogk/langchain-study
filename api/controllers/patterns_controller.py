@@ -1,4 +1,7 @@
 """パターン一覧・グラフ取得・実行 API"""
+import os
+import uuid
+
 from fastapi import APIRouter
 
 from graphs.utils import get_mermaid, get_mermaid_with_trace
@@ -10,6 +13,13 @@ from graphs.pattern4_loop import graph as graph4
 router = APIRouter()
 
 GRAPHS = {1: graph1, 2: graph2, 3: graph3, 4: graph4}
+
+RUN_NAMES = {
+    1: "pattern1_conditional_branch",
+    2: "pattern2_parallel_fanout",
+    3: "pattern3_llm_router",
+    4: "pattern4_loop_improve",
+}
 
 PATTERNS = [
     {
@@ -43,6 +53,49 @@ PATTERNS = [
 ]
 
 
+_ls_project_info = None
+
+
+def _get_ls_project_info() -> dict | None:
+    """LangSmith の org_id と project_id をキャッシュして返す"""
+    global _ls_project_info
+    if _ls_project_info is not None:
+        return _ls_project_info
+    try:
+        from langsmith import Client
+        client = Client()
+        project_name = os.environ.get("LANGCHAIN_PROJECT", "langchain-study")
+        for p in client.list_projects():
+            if p.name == project_name:
+                _ls_project_info = {"org_id": str(p.tenant_id), "project_id": str(p.id)}
+                return _ls_project_info
+    except Exception:
+        pass
+    return None
+
+
+def _langsmith_trace_url(run_id: str) -> str | None:
+    """LangSmith のトレース URL を生成"""
+    if os.environ.get("LANGCHAIN_TRACING_V2", "").lower() != "true":
+        return None
+    info = _get_ls_project_info()
+    if not info:
+        return None
+    return (
+        f"https://smith.langchain.com/o/{info['org_id']}/projects/p/{info['project_id']}"
+        f"?peek={run_id}&peeked_trace={run_id}"
+    )
+
+
+def _build_response(response: dict, graph, trace: list[str], run_id: str) -> dict:
+    """レスポンスに実行フロー Mermaid と LangSmith URL を追加"""
+    response["executed_mermaid"] = get_mermaid_with_trace(graph, trace)
+    url = _langsmith_trace_url(run_id)
+    if url:
+        response["langsmith_url"] = url
+    return response
+
+
 @router.get("/patterns")
 def list_patterns():
     """全パターンの概要を返す"""
@@ -58,62 +111,60 @@ async def get_graph(pattern_id: int):
     return {"mermaid": get_mermaid(graph)}
 
 
-def _add_executed_mermaid(response: dict, graph, trace: list[str]) -> dict:
-    """レスポンスに実行パス付き Mermaid を追加"""
-    response["executed_mermaid"] = get_mermaid_with_trace(graph, trace)
-    return response
-
-
 @router.post("/patterns/{pattern_id}/run")
 async def run_pattern(pattern_id: int, body: dict):
     """指定パターンのグラフを実行"""
+    run_id = str(uuid.uuid4())
+    run_name = RUN_NAMES.get(pattern_id, f"pattern{pattern_id}")
+    tags = [f"pattern{pattern_id}"]
+
     if pattern_id == 1:
         result = graph1.invoke(
             {"input_text": body.get("input_text", ""), "trace": []},
-            config={"run_name": "pattern1_conditional_branch", "tags": ["pattern1", "conditional"]},
+            config={"run_id": run_id, "run_name": run_name, "tags": tags},
         )
-        return _add_executed_mermaid({
+        return _build_response({
             "input_text": result["input_text"],
             "sentiment": result["sentiment"],
             "reasoning": result["reasoning"],
             "response": result["response"],
             "trace": result["trace"],
-        }, graph1, result["trace"])
+        }, graph1, result["trace"], run_id)
 
     elif pattern_id == 2:
         result = graph2.invoke(
             {"input_text": body.get("input_text", ""), "trace": []},
-            config={"run_name": "pattern2_parallel_fanout", "tags": ["pattern2", "parallel"]},
+            config={"run_id": run_id, "run_name": run_name, "tags": tags},
         )
-        return _add_executed_mermaid({
+        return _build_response({
             "input_text": result["input_text"],
             "summary": result.get("summary", ""),
             "keywords": result.get("keywords", ""),
             "translation": result.get("translation", ""),
             "final_report": result.get("final_report", ""),
             "trace": result["trace"],
-        }, graph2, result["trace"])
+        }, graph2, result["trace"], run_id)
 
     elif pattern_id == 3:
         result = graph3.invoke(
             {"question": body.get("question", ""), "trace": []},
-            config={"run_name": "pattern3_llm_router", "tags": ["pattern3", "llm_router"]},
+            config={"run_id": run_id, "run_name": run_name, "tags": tags},
         )
-        return _add_executed_mermaid({
+        return _build_response({
             "question": result["question"],
             "category": result["category"],
             "reasoning": result["reasoning"],
             "expert_answer": result.get("expert_answer", ""),
             "formatted_answer": result.get("formatted_answer", ""),
             "trace": result["trace"],
-        }, graph3, result["trace"])
+        }, graph3, result["trace"], run_id)
 
     elif pattern_id == 4:
         result = graph4.invoke(
             {"topic": body.get("topic", ""), "max_iterations": body.get("max_iterations", 3), "trace": [], "iteration": 0},
-            config={"run_name": "pattern4_loop_improve", "tags": ["pattern4", "loop"]},
+            config={"run_id": run_id, "run_name": run_name, "tags": tags},
         )
-        return _add_executed_mermaid({
+        return _build_response({
             "topic": result["topic"],
             "draft": result["draft"],
             "score": result.get("score", 0),
@@ -122,6 +173,6 @@ async def run_pattern(pattern_id: int, body: dict):
             "iteration": result.get("iteration", 1),
             "final_output": result.get("final_output", ""),
             "trace": result["trace"],
-        }, graph4, result["trace"])
+        }, graph4, result["trace"], run_id)
 
     return {"error": f"Pattern {pattern_id} not found"}

@@ -103,7 +103,15 @@ async function run() {
 
     <!-- 結果表示 -->
     <div v-if="result" class="section">
-      <h3>実行結果</h3>
+      <div class="result-header">
+        <h3>実行結果</h3>
+        <a
+          v-if="result.langsmith_url"
+          :href="result.langsmith_url"
+          target="_blank"
+          class="langsmith-link"
+        >LangSmith で確認</a>
+      </div>
 
       <!-- 実行パス -->
       <div v-if="result.trace" class="trace">
@@ -194,6 +202,32 @@ h3 {
   margin-bottom: 0.75rem;
   border-bottom: 1px solid #334155;
   padding-bottom: 0.5rem;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-header h3 {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.langsmith-link {
+  padding: 0.35rem 1rem;
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  transition: opacity 0.2s;
+}
+
+.langsmith-link:hover {
+  opacity: 0.85;
 }
 
 .graph-toggle {
